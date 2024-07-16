@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  flask_app:
+    build: .
+    ports:
+      - "80:80"
+    volumes:
+      - ./app:/app
+      - ./database:/database
+    environment:
+      FLASK_ENV: development
+    container_name: shoe_production_app
+
+
+
