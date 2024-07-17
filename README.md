@@ -30,7 +30,7 @@ Make sure you have the following installed on your system:
 4. **Access the application**:
     Open your web browser and navigate to `http://localhost:80`.
 
-##Directory Structure
+## Directory Structure
 
 - `app/`: Contains the application code.
 - `database/`: Contains the database files.
