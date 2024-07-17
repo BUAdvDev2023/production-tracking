@@ -34,6 +34,9 @@
         </tr>
         {% endfor %}
     </table>
-    <p><a href="{{ url_for('index') }}">Back to Data Entry</a></p>
+    <p>
+        <a href="{{ url_for('shoe_entry') }}">Back to Shoe Entry</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
+    </p>
 </body>
 </html>
