@@ -13,6 +13,9 @@ COPY app/ /app
 # Copy the database directory contents into the container at /database
 COPY database/ /database
 
+# Copy static directory contents into the container at /app/static
+COPY app/static /app/static
+
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
