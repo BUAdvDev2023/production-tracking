@@ -13,8 +13,8 @@ Make sure you have the following installed on your system:
 
 1. **Clone the repository**:
     ```bash
-    git clone <repository_url>
-    cd <repository_directory>
+    git clone https://github.com/BUAdvDev2023/production-tracking.git
+    cd production-tracking
     ```
 
 2. **Build the Docker image**:

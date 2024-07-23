@@ -28,6 +28,7 @@ EXPOSE 80
 # Update the DB_PATH to point to the new location of the database
 ENV DB_PATH=/database/shoe_database.db
 ENV USERS_DB_PATH=/database/users.db
+ENV SHOE_MODELS_DB_PATH=/database/shoes.db
 
 CMD ["python", "main.py"]
 
