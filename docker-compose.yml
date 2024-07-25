@@ -4,13 +4,11 @@ services:
   flask_app:
     build: .
     ports:
-      - "80:80"
+      - "5273:5273"
     volumes:
       - ./app:/app
       - ./database:/database
     environment:
       FLASK_ENV: development
     container_name: shoe_production_app
-
-
 

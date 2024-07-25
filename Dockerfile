@@ -22,8 +22,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Install sqlite3
 RUN apt-get update && apt-get install -y sqlite3
 
-# Make port 80 available to the world outside this container
-EXPOSE 80
+# Make port 5273 available to the world outside this container
+EXPOSE 5273
 
 # Update the DB_PATH to point to the new location of the database
 ENV DB_PATH=/database/shoe_database.db

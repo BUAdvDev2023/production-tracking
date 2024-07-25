@@ -28,7 +28,7 @@ Make sure you have the following installed on your system:
     ```
 
 4. **Access the application**:
-    Open your web browser and navigate to `http://localhost:80`.
+    Open your web browser and navigate to `http://localhost:5273`.
 
 ## Directory Structure
 
@@ -52,7 +52,7 @@ The application starts with a default admin login with the usename 'admin' and p
 
 ## Additional Information
 
-- **Ports**: The application runs on port `80` inside the container and maps to port `80` on your local machine.
+- **Ports**: The application runs on port `5273` inside the container and maps to port `5273` on your local machine.
 - **Volumes**: The `app` and `database` directories are mounted as volumes to allow live changes during development.
 - **Container Name**: The container is named `shoe_production_app`.
 

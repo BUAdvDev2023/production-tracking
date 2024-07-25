@@ -1,10 +1,20 @@
+"""
+main.py
+This file contains the server-side code for the Shoe Database application.
+It defines API endpoints, handles database operations, and manages user authentication.
+"""
+
+# Standard library imports
 import os
 import sqlite3
+from datetime import datetime
+
+# Third-party imports
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
 
+# Database paths
 DB_PATH = os.getenv('DB_PATH', 'database/shoe_database.db')
 USERS_DB_PATH = os.getenv('USERS_DB_PATH', 'database/users.db')
 SHOE_MODELS_DB_PATH = os.getenv('SHOE_MODELS_DB_PATH', 'database/shoes.db')
@@ -286,6 +296,70 @@ def api_get_shoe_models():
     
     return jsonify([dict(model) for model in models])
 
+@app.route('/api/shoe_creation_data', methods=['GET'])
+@login_required
+def api_get_shoe_creation_data():
+    if current_user.role not in ['admin', 'prodeng']:
+        return jsonify({'success': False, 'message': 'You do not have permission to view this data.'}), 403
+    
+    model_id = request.args.get('model_id', 'all')
+    operator = request.args.get('operator', 'all')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    conn_shoes = get_db_connection()
+    conn_models = get_shoe_models_db_connection()
+    
+    query = '''
+        SELECT date(s.created_at) as date, COUNT(*) as count
+        FROM shoes s
+        WHERE 1=1
+    '''
+    params = []
+    
+    if model_id != 'all':
+        query += ' AND s.shoe_model_id = ?'
+        params.append(model_id)
+    
+    if operator != 'all':
+        query += ' AND s.created_by = ?'
+        params.append(operator)
+    
+    if start_date:
+        query += ' AND s.created_at >= ?'
+        params.append(start_date)
+    
+    if end_date:
+        query += ' AND s.created_at <= ?'
+        params.append(end_date)
+    
+    query += ' GROUP BY date(s.created_at) ORDER BY date(s.created_at)'
+    
+    data = conn_shoes.execute(query, params).fetchall()
+    conn_shoes.close()
+    conn_models.close()
+    
+    return jsonify([{'date': row['date'], 'count': row['count']} for row in data])
+
+@app.route('/api/shoe_models_and_operators', methods=['GET'])
+@login_required
+def api_get_shoe_models_and_operators():
+    if current_user.role not in ['admin', 'prodeng']:
+        return jsonify({'success': False, 'message': 'You do not have permission to view this data.'}), 403
+    
+    conn_models = get_shoe_models_db_connection()
+    models = conn_models.execute('SELECT id, model_name FROM shoe_models').fetchall()
+    conn_models.close()
+
+    conn_shoes = get_db_connection()
+    operators = conn_shoes.execute('SELECT DISTINCT created_by FROM shoes').fetchall()
+    conn_shoes.close()
+    
+    return jsonify({
+        'models': [{'id': model['id'], 'name': model['model_name']} for model in models],
+        'operators': [operator['created_by'] for operator in operators]
+    })
+
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -371,4 +445,6 @@ if __name__ == '__main__':
     ''')
     conn_models.close()
 
-    app.run(host='0.0.0.0', port=80)
+    app.run(host='0.0.0.0', port=5273)
+
+    

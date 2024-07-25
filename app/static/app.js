@@ -1,4 +1,11 @@
-let currentUser = null;
+/**
+ * app.js
+ * This file contains the client-side JavaScript code for the Shoe Database application.
+ * It handles rendering different pages, user interactions, and API calls to the server.
+ */
+
+let currentUser = null; // Stores the current logged-in user's information
+let shoeCreationChart = null; // Stores the Chart.js instance for shoe creation data
 
 function login() {
     const username = document.getElementById('username').value;
@@ -386,9 +393,12 @@ function submitShoeModel(form) {
 }
 
 function renderViewShoeModelsPage() {
-    fetch('/api/shoe_models')
-    .then(response => response.json())
-    .then(models => {
+    Promise.all([
+        fetch('/api/shoe_models').then(response => response.json()),
+        fetch('/api/users').then(response => response.json()),
+        fetch('/api/shoe_models_and_operators').then(response => response.json())
+    ])
+    .then(([models, users, modelsAndOperators]) => {
         const app = document.getElementById('app');
         app.innerHTML = `
             <h1>Shoe Models</h1>
@@ -431,8 +441,87 @@ function renderViewShoeModelsPage() {
                     `).join('')}
                 </tbody>
             </table>
+            <div style="width: 80%; margin: 20px auto;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                    <select id="modelSelect">
+                        <option value="all">All Models</option>
+                        ${modelsAndOperators.models.map(model => `<option value="${model.id}">${model.name}</option>`).join('')}
+                    </select>
+                    <select id="operatorSelect">
+                        <option value="all">All Operators</option>
+                        ${modelsAndOperators.operators.map(operator => `<option value="${operator}">${operator}</option>`).join('')}
+                    </select>
+                    <input type="date" id="startDate">
+                    <input type="date" id="endDate">
+                    <button onclick="updateShoeCreationChart()">Update Chart</button>
+                </div>
+                <canvas id="shoeCreationChart"></canvas>
+            </div>
             <button onclick="renderMainPage()">Back to Main Page</button>
         `;
+        updateShoeCreationChart();
+    });
+}
+
+function updateShoeCreationChart() {
+    const modelId = document.getElementById('modelSelect').value;
+    const operator = document.getElementById('operatorSelect').value;
+    const startDate = document.getElementById('startDate').value;
+    const endDate = document.getElementById('endDate').value;
+
+    const url = new URL('/api/shoe_creation_data', window.location.origin);
+    url.searchParams.append('model_id', modelId);
+    url.searchParams.append('operator', operator);
+    if (startDate) url.searchParams.append('start_date', startDate);
+    if (endDate) url.searchParams.append('end_date', endDate);
+
+    fetch(url)
+        .then(response => response.json())
+        .then(data => createShoeCreationChart(data));
+}
+
+function createShoeCreationChart(data) {
+    const ctx = document.getElementById('shoeCreationChart').getContext('2d');
+    
+    if (shoeCreationChart) {
+        shoeCreationChart.destroy();
+    }
+    
+    shoeCreationChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.map(item => item.date),
+            datasets: [{
+                label: 'Shoes Created',
+                data: data.map(item => item.count),
+                borderColor: 'rgba(75, 192, 192, 1)',
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Number of Shoes'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                }
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Shoes Created Over Time'
+                }
+            }
+        }
     });
 }
 
@@ -508,46 +597,6 @@ function updateShoeModel(modelId, form) {
     });
 }
 
-function submitShoeModel(form) {
-    const formData = new FormData(form);
-    fetch('/api/add_shoe_model', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(Object.fromEntries(formData)),
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert(data.message);
-            renderMainPage();
-        } else {
-            alert(data.message);
-        }
-    });
-}
-
-function submitShoeEntry(form) {
-    const formData = new FormData(form);
-    fetch('/api/shoe_entry', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(Object.fromEntries(formData)),
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert(data.message);
-            renderMainPage();
-        } else {
-            alert(data.message);
-        }
-    });
-}
-
 function deleteShoeModel(modelId) {
     if (confirm('Are you sure you want to delete this shoe model?')) {
         fetch(`/api/delete_shoe_model/${modelId}`, {
@@ -564,7 +613,6 @@ function deleteShoeModel(modelId) {
         });
     }
 }
-
 
 // Initial render
 renderLoginPage();
