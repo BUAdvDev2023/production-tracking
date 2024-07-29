@@ -5,3 +5,5 @@ __pycache__
 .git
 .env
 .vscode
+cert.pem
+key.pem

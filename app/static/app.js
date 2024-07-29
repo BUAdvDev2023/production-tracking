@@ -74,57 +74,102 @@ function renderShoeEntryPage() {
     const app = document.getElementById('app');
     app.innerHTML = `
         <h1>Enter Shoe Details</h1>
-        <form id="shoeEntryForm" style="display: flex; flex-direction: column; gap: 10px;">
-            <input type="text" name="model_name" placeholder="Model Name" required>
-            <input type="text" name="serial_number" placeholder="Serial Number" required>
-            <input type="text" name="batch_number" placeholder="Batch Number" required>
-            <input type="text" name="shoe_type" placeholder="Shoe Type" required>
-            <input type="text" name="size" placeholder="Size" required>
-            <input type="text" name="brand" placeholder="Brand" required>
-            <select name="shoe_model_id" required>
-                <option value="">Select Shoe Model</option>
+        <form id="shoeEntryForm" style="display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center;">
+            <label for="modelSelect">Model Name:</label>
+            <select id="modelSelect" name="model_name" required>
+                <option value="">Select Model</option>
                 <!-- This will be populated dynamically -->
             </select>
-            <button type="submit">Send</button>
+            <label for="serialNumber">Serial Number:</label>
+            <input type="text" id="serialNumber" name="serial_number" required>
+            <label for="batchNumber">Batch Number:</label>
+            <input type="text" id="batchNumber" name="batch_number" required>
+            <label for="brand">Brand:</label>
+            <input type="text" id="brand" readonly>
+            <label for="category">Category:</label>
+            <input type="text" id="category" readonly>
+            <label for="gender">Gender:</label>
+            <input type="text" id="gender" readonly>
+            <label for="material">Material:</label>
+            <input type="text" id="material" readonly>
+            <label for="soleType">Sole Type:</label>
+            <input type="text" id="sole_type" readonly>
+            <label for="closureType">Closure Type:</label>
+            <input type="text" id="closure_type" readonly>
+            <label for="color">Color:</label>
+            <input type="text" id="color" readonly>
+            <label for="weightGrams">Weight (grams):</label>
+            <input type="text" id="weight_grams" readonly>
+            <div style="grid-column: span 2; justify-self: center;">
+                <button type="submit">Send</button>
+            </div>
         </form>
-        <button onclick="renderMainPage()">Back to Main Page</button>
+        <p>
+            <a href="#" onclick="renderMainPage()">Home</a>
+            <a href="#" onclick="renderViewDataPage()">View Database Contents</a>
+            <a href="#" onclick="logout()">Logout</a>
+        </p>
     `;
-    document.getElementById('shoeEntryForm').addEventListener('submit', (e) => {
-        e.preventDefault();
-        submitShoeEntry(e.target);
-    });
-    
-    // Populate shoe model dropdown
+
+    // Populate model dropdown
     fetch('/api/shoe_models')
     .then(response => response.json())
     .then(models => {
-        const select = document.querySelector('select[name="shoe_model_id"]');
+        const select = document.getElementById('modelSelect');
         models.forEach(model => {
             const option = document.createElement('option');
-            option.value = model.id;
-            option.textContent = `${model.brand} - ${model.model_name}`;
+            option.value = model.model_name;
+            option.textContent = model.model_name;
             select.appendChild(option);
         });
+    });
+
+    // Add event listener for model selection
+    document.getElementById('modelSelect').addEventListener('change', function(e) {
+        const selectedModel = e.target.value;
+        fetch(`/api/shoe_model_details/${selectedModel}`)
+        .then(response => response.json())
+        .then(modelDetails => {
+            document.getElementById('brand').value = modelDetails.brand;
+            document.getElementById('category').value = modelDetails.category;
+            document.getElementById('gender').value = modelDetails.gender;
+            document.getElementById('material').value = modelDetails.material;
+            document.getElementById('sole_type').value = modelDetails.sole_type;
+            document.getElementById('closure_type').value = modelDetails.closure_type;
+            document.getElementById('color').value = modelDetails.color;
+            document.getElementById('weight_grams').value = modelDetails.weight_grams;
+        });
+    });
+
+    document.getElementById('shoeEntryForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        submitShoeEntry(e.target);
     });
 }
 
 function submitShoeEntry(form) {
     const formData = new FormData(form);
+    const data = Object.fromEntries(formData.entries());
+
     fetch('/api/shoe_entry', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify(Object.fromEntries(formData)),
+        body: JSON.stringify(data),
     })
     .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert(data.message);
-            renderMainPage();
+    .then(result => {
+        if (result.success) {
+            alert(result.message);
+            form.reset();
         } else {
-            alert(data.message);
+            alert('Error: ' + result.message);
         }
+    })
+    .catch((error) => {
+        console.error('Error:', error);
+        alert('An error occurred while submitting the form.');
     });
 }
 
@@ -456,10 +501,14 @@ function renderViewShoeModelsPage() {
                     <button onclick="updateShoeCreationChart()">Update Chart</button>
                 </div>
                 <canvas id="shoeCreationChart"></canvas>
+                <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+                    <button id="downloadChartBtn">Download Chart</button>
+                </div>
             </div>
             <button onclick="renderMainPage()">Back to Main Page</button>
         `;
         updateShoeCreationChart();
+        document.getElementById('downloadChartBtn').addEventListener('click', downloadChart);
     });
 }
 
@@ -523,6 +572,15 @@ function createShoeCreationChart(data) {
             }
         }
     });
+}
+
+function downloadChart() {
+    const canvas = document.getElementById('shoeCreationChart');
+    const dataURL = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.download = 'shoe_creation_chart.png';
+    link.href = dataURL;
+    link.click();
 }
 
 function editShoeModel(modelId) {

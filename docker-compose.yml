@@ -11,4 +11,3 @@ services:
     environment:
       FLASK_ENV: development
     container_name: shoe_production_app
-

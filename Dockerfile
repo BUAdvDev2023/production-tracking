@@ -26,10 +26,11 @@ RUN apt-get update && apt-get install -y sqlite3
 EXPOSE 5273
 
 # Update the DB_PATH to point to the new location of the database
-ENV DB_PATH=/database/shoe_database.db
+ENV SHOE_DB_PATHB_PATH=/database/shoes.db
 ENV USERS_DB_PATH=/database/users.db
-ENV SHOE_MODELS_DB_PATH=/database/shoes.db
+ENV MODELS_DB_PATH=/database/models.db
 
 CMD ["python", "main.py"]
+
 
 
