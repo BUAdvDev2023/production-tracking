@@ -7,7 +7,8 @@ It defines API endpoints, handles database operations, and manages user authenti
 # Standard library imports
 import os
 import sqlite3
-from datetime import datetime
+import shutil
+from datetime import datetime, timedelta
 
 # Third-party imports
 import ssl
@@ -15,6 +16,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from OpenSSL import crypto
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # Database paths
 SHOE_DB_PATH = os.getenv('SHOE_DB_PATH', 'database/shoes.db')
@@ -34,6 +36,7 @@ class User(UserMixin):
         self.username = username
         self.role = role
 
+# Flask-Login user loader
 @login_manager.user_loader
 def load_user(user_id):
     conn = get_users_db_connection()
@@ -43,11 +46,13 @@ def load_user(user_id):
         return User(user['id'], user['username'], user['role'])
     return None
 
+# Catch-all route for single-page application
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def catch_all(path):
     return render_template('index.html')
 
+# API endpoint for user login
 @app.route('/api/login', methods=['POST'])
 def api_login():
     username = request.json['username']
@@ -57,11 +62,46 @@ def api_login():
     conn.close()
 
     if user and check_password_hash(user['password'], password):
+        if check_password_expiration(user):
+            return jsonify({'success': False, 'message': 'Password expired. Please reset your password.', 'reset_required': True}), 401
         login_user(User(user['id'], user['username'], user['role']))
         return jsonify({'success': True, 'user': {'username': user['username'], 'role': user['role']}})
     else:
         return jsonify({'success': False, 'message': 'Invalid username or password'}), 401
 
+# Check password expiration date
+def check_password_expiration(user):
+    if user['role'] == 'admin':
+        return False
+    last_change = datetime.strptime(user['last_password_change'], '%Y-%m-%d').date()
+    return (datetime.now().date() - last_change).days >= 90
+
+# Reset password
+@app.route('/api/reset_password', methods=['POST'])
+def api_reset_password():
+    username = request.json['username']
+    current_password = request.json['currentPassword']
+    new_password = request.json['newPassword']
+
+    conn = get_users_db_connection()
+    user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
+
+    if user and check_password_hash(user['password'], current_password):
+        if check_password_hash(user['password'], new_password):
+            conn.close()
+            return jsonify({'success': False, 'message': 'New password must be different from the current password.'}), 400
+        
+        hashed_password = generate_password_hash(new_password)
+        conn.execute('UPDATE users SET password = ?, last_password_change = ? WHERE id = ?', 
+                     (hashed_password, datetime.now().date().isoformat(), user['id']))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Password reset successfully.'})
+    else:
+        conn.close()
+        return jsonify({'success': False, 'message': 'Invalid username or current password.'}), 401
+
+# API endpoint for submitting shoe entry data
 @app.route('/api/shoe_entry', methods=['POST'])
 @login_required
 def api_shoe_entry():    
@@ -104,6 +144,7 @@ def api_shoe_entry():
     except sqlite3.Error as e:
         return jsonify({'success': False, 'message': f'An error occurred: {e}'}), 500
     
+# API endpoint for viewing shoe data
 @app.route('/api/view_shoes', methods=['GET'])
 @login_required
 def api_view_shoes():
@@ -126,6 +167,7 @@ def api_view_shoes():
     
     return jsonify(shoe_list)
 
+# API endpoint for creating a new account
 @app.route('/api/create_account', methods=['POST'])
 @login_required
 def api_create_account():
@@ -148,6 +190,7 @@ def api_create_account():
     finally:
         conn.close()
 
+# API endpoint for retrieving all users
 @app.route('/api/users', methods=['GET'])
 @login_required
 def api_get_users():
@@ -159,6 +202,7 @@ def api_get_users():
     conn.close()
     return jsonify([dict(user) for user in users])
 
+# API endpoint for updating a user's role
 @app.route('/api/update_user_role', methods=['POST'])
 @login_required
 def api_update_user_role():
@@ -175,6 +219,7 @@ def api_update_user_role():
 
     return jsonify({'success': True, 'message': 'User role updated successfully.'})
 
+# API endpoint for deleting a user
 @app.route('/api/delete_user', methods=['POST'])
 @login_required
 def api_delete_user():
@@ -196,6 +241,7 @@ def api_delete_user():
 
     return jsonify({'success': True, 'message': 'User deleted successfully.'})
 
+# API endpoint for adding a new shoe model
 @app.route('/api/add_shoe_model', methods=['POST'])
 @login_required
 def api_add_shoe_model():
@@ -233,45 +279,8 @@ def api_add_shoe_model():
         return jsonify({'success': True, 'message': 'Shoe model added successfully!', 'id': new_id})
     except sqlite3.Error as e:
         return jsonify({'success': False, 'message': f'An error occurred: {e}'}), 500
-    
-@app.route('/api/edit_shoe_model/<int:model_id>', methods=['PUT'])
-@login_required
-def api_edit_shoe_model(model_id):
-    if current_user.role not in ['admin', 'prodeng']:
-        return jsonify({'success': False, 'message': 'You do not have permission to edit shoe models.'}), 403
-    
-    try:
-        conn = get_models_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            UPDATE shoe_models SET
-                model_name = ?, brand = ?, category = ?, gender = ?, 
-                material = ?, sole_type = ?, closure_type = ?, 
-                color = ?, weight_grams = ?, price = ?, release_date = ?,
-                updated_at = ?, updated_by = ?
-            WHERE id = ?
-        ''', (
-            request.json['model_name'],
-            request.json['brand'],
-            request.json['category'],
-            request.json['gender'],
-            request.json['material'],
-            request.json['sole_type'],
-            request.json['closure_type'],
-            request.json['color'],
-            request.json['weight_grams'],
-            request.json['price'],
-            request.json['release_date'],
-            datetime.now().isoformat(),
-            current_user.id,
-            model_id
-        ))
-        conn.commit()
-        conn.close()
-        return jsonify({'success': True, 'message': 'Shoe model updated successfully!'})
-    except sqlite3.Error as e:
-        return jsonify({'success': False, 'message': f'An error occurred: {e}'}), 500
 
+# API endpoint for deleting a shoe model
 @app.route('/api/delete_shoe_model/<int:model_id>', methods=['DELETE'])
 @login_required
 def api_delete_shoe_model(model_id):
@@ -298,6 +307,7 @@ def api_get_shoe_models():
     
     return jsonify([dict(model) for model in models])
 
+# API endpoint for retrieving shoe creation data for graphs
 @app.route('/api/shoe_creation_data', methods=['GET'])
 @login_required
 def api_get_shoe_creation_data():
@@ -343,6 +353,7 @@ def api_get_shoe_creation_data():
     
     return jsonify([{'date': row['date'], 'count': row['count']} for row in data])
 
+# API endpoint for retrieving shoe models and operators for graphs
 @app.route('/api/shoe_models_and_operators', methods=['GET'])
 @login_required
 def api_get_shoe_models_and_operators():
@@ -362,27 +373,101 @@ def api_get_shoe_models_and_operators():
         'operators': [operator['created_by'] for operator in operators]
     })
 
+# Helper function to get a connection to the shoe database
 def get_shoe_db_connection():
     conn = sqlite3.connect(SHOE_DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
+# Helper function to get a connection to the users database
 def get_users_db_connection():
     conn = sqlite3.connect(USERS_DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
+# Helper function to get a connection to the models database
 def get_models_db_connection():
     conn = sqlite3.connect(MODELS_DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
+# API endpoint for user logout
 @app.route('/api/logout', methods=['GET'])
 @login_required
 def api_logout():
     logout_user()
     return jsonify({'success': True, 'message': 'Logged out successfully.'})
 
+# Add this function to handle database backups
+def backup_databases(override=False):
+    backup_dir = os.path.join(os.path.dirname(os.path.dirname(SHOE_DB_PATH)), 'database', 'backup')
+    os.makedirs(backup_dir, exist_ok=True)
+
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    existing_files = []
+
+    for db_path in [SHOE_DB_PATH, USERS_DB_PATH, MODELS_DB_PATH]:
+        db_name = os.path.basename(db_path)
+        backup_path = os.path.join(backup_dir, f'{db_name}_{timestamp}.bak')
+        if os.path.exists(backup_path) and not override:
+            existing_files.append(backup_path)
+        else:
+            shutil.copy2(db_path, backup_path)
+            print(f'Backed up {db_path} to {backup_path}')
+
+    if existing_files and not override:
+        return False, existing_files
+
+    # Remove backups older than 30 days
+    thirty_days_ago = datetime.now() - timedelta(days=30)
+    for db_path in [SHOE_DB_PATH, USERS_DB_PATH, MODELS_DB_PATH]:
+        db_name = os.path.basename(db_path)
+        for backup_file in os.listdir(backup_dir):
+            if backup_file.startswith(db_name):
+                backup_path = os.path.join(backup_dir, backup_file)
+                if os.path.isfile(backup_path):
+                    try:
+                        file_timestamp = datetime.strptime(backup_file.split('_')[-1].split('.')[0], '%Y%m%d_%H%M%S')
+                        if file_timestamp < thirty_days_ago:
+                            os.remove(backup_path)
+                            print(f'Removed old backup: {backup_path}')
+                    except ValueError:
+                        print(f'Skipping file with invalid timestamp format: {backup_file}')
+
+    return True, []
+
+# API endpoint for performing a manual backup
+@app.route('/api/manual_backup', methods=['POST'])
+@login_required
+def api_manual_backup():
+    if current_user.role != 'admin':
+        return jsonify({'success': False, 'message': 'You do not have permission to perform manual backups.'}), 403
+    
+    try:
+        success, existing_files = backup_databases()
+        if not success:
+            return jsonify({'success': False, 'message': 'Existing backup files found.', 'existing_files': existing_files}), 409
+        return jsonify({'success': True, 'message': 'Manual backup performed successfully.'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'An error occurred during backup: {str(e)}'}), 500
+
+# Add a new API endpoint for confirming overwrite
+@app.route('/api/confirm_backup_overwrite', methods=['POST'])
+@login_required
+def api_confirm_backup_overwrite():
+    if current_user.role != 'admin':
+        return jsonify({'success': False, 'message': 'You do not have permission to perform manual backups.'}), 403
+    
+    try:
+        success, _ = backup_databases(override=True)
+        if success:
+            return jsonify({'success': True, 'message': 'Manual backup performed successfully, overwriting existing files.'})
+        else:
+            return jsonify({'success': False, 'message': 'Failed to perform backup with overwrite.'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'An error occurred during backup: {str(e)}'}), 500
+
+# API endpoint for retrieving details of a specific shoe model
 @app.route('/api/shoe_model_details/<model_name>', methods=['GET'])
 @login_required
 def api_get_shoe_model_details(model_name):
@@ -394,6 +479,45 @@ def api_get_shoe_model_details(model_name):
         return jsonify(dict(model))
     else:
         return jsonify({'error': 'Model not found'}), 404
+
+# API endpoint for editing a new shoe model    
+@app.route('/api/edit_shoe_model/<int:model_id>', methods=['PUT'])
+@login_required
+def api_edit_shoe_model(model_id):
+    if current_user.role not in ['admin', 'prodeng']:
+        return jsonify({'success': False, 'message': 'You do not have permission to edit shoe models.'}), 403
+    
+    try:
+        conn = get_models_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE shoe_models SET
+            model_name = ?, brand = ?, category = ?, gender = ?,
+            material = ?, sole_type = ?, closure_type = ?,
+            color = ?, weight_grams = ?, price = ?, release_date = ?,
+            updated_at = ?, updated_by = ?
+            WHERE id = ?
+        ''', (
+            request.json['model_name'],
+            request.json['brand'],
+            request.json['category'],
+            request.json['gender'],
+            request.json['material'],
+            request.json['sole_type'],
+            request.json['closure_type'],
+            request.json['color'],
+            request.json['weight_grams'],
+            request.json['price'],
+            request.json['release_date'],
+            datetime.now().isoformat(),
+            current_user.id,
+            model_id
+        ))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Shoe model updated successfully!'})
+    except sqlite3.Error as e:
+        return jsonify({'success': False, 'message': f'An error occurred: {e}'}), 500
 
 if __name__ == '__main__':
     os.makedirs(os.path.dirname(SHOE_DB_PATH), exist_ok=True)
@@ -420,7 +544,8 @@ if __name__ == '__main__':
         (id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
-        role TEXT NOT NULL)
+        role TEXT NOT NULL,
+        last_password_change DATE NOT NULL)
     ''')
 
     # Initialize shoe models database
@@ -484,6 +609,15 @@ if __name__ == '__main__':
             f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
         with open(key_file, "wb") as f:
             f.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k))
+
+    # Schedule backup task
+    def scheduled_backup():
+        with app.app_context():
+            backup_databases()
+
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(func=scheduled_backup, trigger="interval", days=7)
+    scheduler.start()
 
     # Run the app with SSL
     app.run(host='0.0.0.0', port=5273, ssl_context=(cert_file, key_file))

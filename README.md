@@ -10,6 +10,8 @@ This project is a web-based application for tracking shoe production, managing s
 - Data visualization with charts (for Product Engineers and Admins)
 - User account management (for Admins)
 - HTTPS support with self-signed certificates
+- Database backup functionality
+- Password expiration and reset mechanism
 
 ## Prerequisites
 
@@ -63,7 +65,7 @@ The following environment variables are set in the Docker Compose file:
 
 ## Login
 
-The application starts with a default admin account and two more I have added for testing purposes:
+The application starts with a default admin account and two more accounts for testing purposes:
 
 1. Admin Account:
    - Username: `admin`
@@ -82,6 +84,7 @@ The application starts with a default admin account and two more I have added fo
 - The application uses HTTPS with a self-signed certificate for development purposes.
 - Passwords are hashed before storing in the database.
 - Role-based access control is implemented to restrict access to certain features.
+- Password expiration is enforced for non-admin users (90 days).
 
 ## Additional Information
 
@@ -93,7 +96,14 @@ The application starts with a default admin account and two more I have added fo
 
 The application uses a single-page application (SPA) approach with client-side routing. The main JavaScript file (`app/static/app.js`) handles the routing and rendering of different views.
 
-To make changes to the frontend, edit the `app.js` file. For backend changes, modify `main.py`.
+To make changes to the frontend, edit the JavaScript files in the `app/static/js/` directory. For backend changes, modify `main.py`.
+
+## New Features
+
+- **Database Backup**: Admins can now perform manual backups of the database. Automatic backups are scheduled weekly.
+- **Password Reset**: Users are required to reset their password after 90 days (except for admin accounts).
+- **Data Visualization**: Enhanced charting capabilities for viewing shoe production data.
+- **Shoe Model Management**: Improved interface for creating, editing, and deleting shoe models.
 
 ## Troubleshooting
 
