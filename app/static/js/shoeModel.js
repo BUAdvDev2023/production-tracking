@@ -91,6 +91,10 @@ export function submitShoeModel(form) {
         } else {
             alert(data.message);
         }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while submitting the shoe model.');
     });
 }
 
@@ -138,33 +142,13 @@ export function renderViewShoeModelsPage() {
                             <td>${model.price}</td>
                             <td>${model.release_date}</td>
                             <td>
-                                <button onclick="editShoeModel(${JSON.stringify(model)})">Edit</button>
+                                <!--<button onclick="editShoeModel(${JSON.stringify(model)})">Edit</button>-->
                                 <button onclick="deleteShoeModel(${model.id})">Delete</button>
                             </td>
                         </tr>
                     `).join('')}
                 </tbody>
             </table>
-            <div style="width: 80%; margin: 20px auto;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                    <select id="modelSelect">
-                        <option value="all">All Models</option>
-                        ${modelsAndOperators.models.map(model => `<option value="${model.id}">${model.name}</option>`).join('')}
-                    </select>
-                    <select id="operatorSelect">
-                        <option value="all">All Operators</option>
-                        ${modelsAndOperators.operators.map(operator => `<option value="${operator}">${operator}</option>`).join('')}
-                    </select>
-                    <input type="date" id="startDate">
-                    <input type="date" id="endDate">
-                    <button onclick="updateShoeCreationChart()">Update Chart</button>
-                </div>
-                <canvas id="shoeCreationChart"></canvas>
-                <div style="display: flex; justify-content: space-between; margin-top: 10px;">
-                    <button id="downloadChartBtn">Download Chart</button>
-                </div>
-            </div>
-            <button onclick="renderMainPage()">Back to Main Page</button>
         `;
         updateShoeCreationChart();
         document.getElementById('downloadChartBtn').addEventListener('click', downloadChart);

@@ -40,11 +40,6 @@ export function renderShoeEntryPage() {
                 <button type="submit">Send</button>
             </div>
         </form>
-        <p>
-            <a href="#" onclick="renderMainPage()">Home</a>
-            <a href="#" onclick="renderViewDataPage()">View Database Contents</a>
-            <a href="#" onclick="logout()">Logout</a>
-        </p>
     `;
 
     // Populate model dropdown
@@ -112,48 +107,79 @@ export function submitShoeEntry(form) {
 
 // Renders the page for viewing shoe data
 export function renderViewDataPage() {
-    fetch('/api/view_shoes')
+    fetchShoes();
+}
+
+export function fetchShoes(searchTerm = '', searchType = 'model_name') {
+    fetch(`/api/view_shoes?search=${searchTerm}&type=${searchType}`)
     .then(response => response.json())
     .then(shoes => {
         const app = document.getElementById('app');
         app.innerHTML = `
             ${renderNavBar()}
-            <h1>Shoe Database Contents</h1>
-            <table>
+            <h1>Produced Shoes</h1>
+            <div class="search-container">
+                <input type="text" id="searchInput" placeholder="Search..." value="${searchTerm}">
+                <select id="searchType">
+                    <option value="model_name" ${searchType === 'model_name' ? 'selected' : ''}>Model Name</option>
+                    <option value="serial_number" ${searchType === 'serial_number' ? 'selected' : ''}>Serial Number</option>
+                    <option value="batch_number" ${searchType === 'batch_number' ? 'selected' : ''}>Batch Number</option>
+                    <option value="created_by" ${searchType === 'created_by' ? 'selected' : ''}>Created By</option>
+                </select>
+                <button onclick="searchShoes()">Search</button>
+            </div>
+            <table id="shoesTable">
                 <thead>
                     <tr>
                         <th>ID</th>
                         <th>Model Name</th>
                         <th>Serial Number</th>
                         <th>Batch Number</th>
-                        <th>Shoe Type</th>
-                        <th>Size</th>
-                        <th>Brand</th>
-                        <th>Shoe Model ID</th>
                         <th>Created At</th>
                         <th>Created By</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${shoes.map(shoe => `
-                        <tr>
-                            <td>${shoe.id}</td>
-                            <td>${shoe.model_name}</td>
-                            <td>${shoe.serial_number}</td>
-                            <td>${shoe.batch_number}</td>
-                            <td>${shoe.shoe_type}</td>
-                            <td>${shoe.size}</td>
-                            <td>${shoe.brand}</td>
-                            <td>${shoe.shoe_model_id || 'N/A'}</td>
-                            <td>${shoe.created_at || 'N/A'}</td>
-                            <td>${shoe.created_by || 'N/A'}</td>
-                        </tr>
-                    `).join('')}
+                    ${renderShoeRows(shoes)}
                 </tbody>
             </table>
-            <button onclick="renderMainPage()">Back to Main Page</button>
-            <button onclick="renderShoeEntryPage()">Back to Shoe Entry</button>
-            <button onclick="logout()">Logout</button>
         `;
+
+        // Add event listener for real-time search
+        document.getElementById('searchInput').addEventListener('input', debounce(searchShoes, 300));
+        document.getElementById('searchType').addEventListener('change', searchShoes);
     });
+}
+
+// Searches for shoes based on the search term and type
+export function searchShoes() {
+    const searchInput = document.getElementById('searchInput').value;
+    const searchType = document.getElementById('searchType').value;
+    fetchShoes(searchInput, searchType);
+}
+
+// Debounce function to limit how often searchShoes gets called
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+function renderShoeRows(shoes) {
+    return shoes.map(shoe => `
+        <tr>
+            <td>${shoe.id || 'N/A'}</td>
+            <td>${shoe.model_name || 'N/A'}</td>
+            <td>${shoe.serial_number || 'N/A'}</td>
+            <td>${shoe.batch_number || 'N/A'}</td>
+            <td>${shoe.created_at || 'N/A'}</td>
+            <td>${shoe.created_by || 'N/A'}</td>
+        </tr>
+    `).join('');
 }

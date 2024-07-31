@@ -35,8 +35,6 @@ export function renderManageAccountsPage() {
                     </tr>
                 `).join('')}
             </table>
-            <button onclick="renderCreateAccountPage()">Create New Account</button>
-            <button onclick="renderMainPage()">Back to Main Page</button>
         `;
     });
 }
@@ -45,6 +43,7 @@ export function renderManageAccountsPage() {
 export function renderCreateAccountPage() {
     const app = document.getElementById('app');
     app.innerHTML = `
+        ${renderNavBar()}
         <h1>Create New Account</h1>
         <form id="createAccountForm">
             <label for="username">Username:</label>
@@ -57,9 +56,9 @@ export function renderCreateAccountPage() {
                 <option value="prodeng">Product Engineer</option>
                 <option value="admin">Admin</option>
             </select><br><br>
+            <p>Note: Non-admin users will be required to change their password every 90 days.</p>
             <button type="submit">Create Account</button>
         </form>
-        <button onclick="renderMainPage()">Back to Main Page</button>
     `;
     document.getElementById('createAccountForm').addEventListener('submit', (e) => {
         e.preventDefault();

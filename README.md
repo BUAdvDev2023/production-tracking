@@ -9,9 +9,6 @@ This project is a web-based application for tracking shoe production, managing s
 - Shoe model management (for Product Engineers and Admins)
 - Data visualization with charts (for Product Engineers and Admins)
 - User account management (for Admins)
-- HTTPS support with self-signed certificates
-- Database backup functionality
-- Password expiration and reset mechanism
 
 ## Prerequisites
 
@@ -85,6 +82,62 @@ The application starts with a default admin account and two more accounts for te
 - Passwords are hashed before storing in the database.
 - Role-based access control is implemented to restrict access to certain features.
 - Password expiration is enforced for non-admin users (90 days).
+- Database backup functionalitym
+
+## API Usage for External Programs
+
+The application provides a RESTful API that can be used by external programs to interact with the shoe production tracking system. Here's how to use it:
+
+1. **Authentication**: To use the API, you need to obtain an API key. Contact the system administrator to get your API key.
+
+2. **Base URL**: The base URL for API requests is `https://localhost:5273/api/v1/`.
+
+3. **Endpoints**:
+   - GET `/shoes`: Retrieve all shoes
+   - POST `/shoes`: Create a new shoe entry
+   - GET `/shoes/<id>`: Retrieve a specific shoe
+   - PUT `/shoes/<id>`: Update a specific shoe
+   - DELETE `/shoes/<id>`: Delete a specific shoe
+
+4. **Headers**: Include your API key in the `X-API-Key` header for all requests.
+
+5. **Example Usage**:
+   ```python
+   import requests
+
+   api_key = "your_api_key_here"
+   base_url = "https://localhost:5273/api/v1"
+
+   headers = {
+       "X-API-Key": api_key,
+       "Content-Type": "application/json"
+   }
+
+   # Get all shoes
+   response = requests.get(f"{base_url}/shoes", headers=headers, verify=False)
+   print(response.json())
+   ```
+
+   Note: The `verify=False` parameter is used to bypass SSL certificate verification, which is necessary when using self-signed certificates in a development environment. In a production environment, proper SSL certificates should be used, and this parameter should be removed.
+
+### Running api_test.py
+
+To test the API functionality, you can use the provided `api_test.py` script. Here's how to run it:
+
+1. Ensure that the application is running (`docker-compose up`).
+
+2. Open a new terminal window and navigate to the project directory.
+
+3. Run the script:
+   ```bash
+   python api_test.py
+   ```
+
+4. The script will perform a series of API calls to test various endpoints and print the results.
+
+Note: Make sure you have the `requests` library installed (`pip install requests`) before running the script.
+
+If you encounter any issues with the API or the test script, please check the application logs for more information and ensure that your API key is correct and active.
 
 ## Additional Information
 

@@ -18,6 +18,16 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from OpenSSL import crypto
 from apscheduler.schedulers.background import BackgroundScheduler
 
+# API imports
+from flask_restful import Api, Resource
+from flask_apispec import FlaskApiSpec, marshal_with, doc, use_kwargs
+from flask_apispec.views import MethodResource
+from marshmallow import Schema, fields
+from functools import wraps
+from flask_apispec.extension import FlaskApiSpec
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
 # Database paths
 SHOE_DB_PATH = os.getenv('SHOE_DB_PATH', 'database/shoes.db')
 USERS_DB_PATH = os.getenv('USERS_DB_PATH', 'database/users.db')
@@ -148,22 +158,30 @@ def api_shoe_entry():
 @app.route('/api/view_shoes', methods=['GET'])
 @login_required
 def api_view_shoes():
+    search_term = request.args.get('search', '')
+    search_type = request.args.get('type', 'model_name')
+
     conn = get_shoe_db_connection()
-    shoes = conn.execute('SELECT * FROM shoes').fetchall()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    query = '''
+    SELECT 
+        id,
+        model_name,
+        serial_number,
+        batch_number,
+        created_at,
+        created_by
+    FROM shoes
+    WHERE {} LIKE ?
+    '''.format(search_type)
+    
+    cursor.execute(query, ('%' + search_term + '%',))
+    shoes = cursor.fetchall()
     conn.close()
     
-    # Convert sqlite3.Row objects to dictionaries
-    shoe_list = []
-    for shoe in shoes:
-        shoe_dict = dict(shoe)
-        # If 'created_by' is stored as user ID, we need to fetch the username
-        if 'created_by' in shoe_dict:
-            user_conn = get_users_db_connection()
-            user = user_conn.execute('SELECT username FROM users WHERE id = ?', (shoe_dict['created_by'],)).fetchone()
-            user_conn.close()
-            if user:
-                shoe_dict['created_by'] = user['username']
-        shoe_list.append(shoe_dict)
+    shoe_list = [dict(row) for row in shoes]
     
     return jsonify(shoe_list)
 
@@ -181,8 +199,9 @@ def api_create_account():
     conn = get_users_db_connection()
     try:
         hashed_password = generate_password_hash(password)
-        conn.execute('INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
-                     (username, hashed_password, role))
+        current_date = datetime.now().date().isoformat()
+        conn.execute('INSERT INTO users (username, password, role, last_password_change) VALUES (?, ?, ?, ?)',
+                     (username, hashed_password, role, current_date))
         conn.commit()
         return jsonify({'success': True, 'message': 'Account created successfully.'})
     except sqlite3.IntegrityError:
@@ -251,6 +270,13 @@ def api_add_shoe_model():
     try:
         conn = get_models_db_connection()
         cursor = conn.cursor()
+
+        # Check if a model with the same name already exists
+        existing_model = conn.execute('SELECT * FROM shoe_models WHERE model_name = ?', (request.json['model_name'],)).fetchone()
+        if existing_model:
+            conn.close()
+            return jsonify({'success': False, 'message': 'A model with this name already exists.'}), 400
+
         cursor.execute('''
             INSERT INTO shoe_models (
                 model_name, brand, category, gender, 
@@ -271,7 +297,7 @@ def api_add_shoe_model():
             request.json['price'],
             request.json['release_date'],
             datetime.now().isoformat(),
-            current_user.id
+            current_user.username
         ))
         conn.commit()
         new_id = cursor.lastrowid
@@ -297,7 +323,7 @@ def api_delete_shoe_model(model_id):
     except sqlite3.Error as e:
         return jsonify({'success': False, 'message': f'An error occurred: {e}'}), 500
 
-    
+# API endpoint for retrieving all shoe models
 @app.route('/api/shoe_models', methods=['GET'])
 @login_required
 def api_get_shoe_models():
@@ -518,6 +544,75 @@ def api_edit_shoe_model(model_id):
         return jsonify({'success': True, 'message': 'Shoe model updated successfully!'})
     except sqlite3.Error as e:
         return jsonify({'success': False, 'message': f'An error occurred: {e}'}), 500
+    
+"""This code is API for external programs to connect to this one."""
+api = Api(app)
+docs = FlaskApiSpec(app)
+
+def require_api_key(view_function):
+    @wraps(view_function)
+    def decorated_function(*args, **kwargs):
+        if request.headers.get('X-API-Key') and request.headers.get('X-API-Key') == 'your_api_key_here':
+            return view_function(*args, **kwargs)
+        else:
+            abort(401)
+    return decorated_function
+
+class ShoeModelSchema(Schema):
+    id = fields.Int(dump_only=True)
+    model_name = fields.Str()
+    brand = fields.Str()
+    category = fields.Str()
+    gender = fields.Str()
+    material = fields.Str()
+    sole_type = fields.Str()
+    closure_type = fields.Str()
+    color = fields.Str()
+    weight_grams = fields.Int()
+    price = fields.Float()
+    release_date = fields.Str()
+
+class ShoeModelListAPI(MethodResource, Resource):
+    @require_api_key
+    @doc(description='Get all shoe models')
+    @marshal_with(ShoeModelSchema(many=True))
+    def get(self):
+        conn = get_models_db_connection()
+        models = conn.execute('SELECT * FROM shoe_models').fetchall()
+        conn.close()
+        return models
+
+class ShoeSchema(Schema):
+    id = fields.Int(dump_only=True)
+    model_name = fields.Str()
+    serial_number = fields.Str()
+    batch_number = fields.Str()
+    created_at = fields.Str()
+    created_by = fields.Str()
+
+class ShoeListAPI(MethodResource, Resource):
+    @require_api_key
+    @doc(description='Get all produced shoes')
+    @marshal_with(ShoeSchema(many=True))
+    def get(self):
+        conn = get_shoe_db_connection()
+        shoes = conn.execute('SELECT * FROM shoes').fetchall()
+        conn.close()
+        return shoes
+
+api.add_resource(ShoeModelListAPI, '/api/v1/shoe_models')
+api.add_resource(ShoeListAPI, '/api/v1/shoes')
+
+docs.register(ShoeModelListAPI)
+docs.register(ShoeListAPI)
+
+# Add rate limiting
+limiter = Limiter(key_func=get_remote_address)
+limiter.init_app(app)
+
+# Apply rate limiting to the API classes
+ShoeModelListAPI.decorators = [limiter.limit("100/day")]
+ShoeListAPI.decorators = [limiter.limit("100/day")]
 
 if __name__ == '__main__':
     os.makedirs(os.path.dirname(SHOE_DB_PATH), exist_ok=True)

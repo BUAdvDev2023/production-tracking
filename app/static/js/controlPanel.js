@@ -1,3 +1,10 @@
+/**
+ * controlPanel.js
+ * This file contains functions for managing the admin control panel,
+ * including rendering the control panel and backup page, performing
+ * manual backups, and handling backup confirmations.
+ */
+
 // Renders the control panel
 export function renderControlPanel() {
     const app = document.getElementById('app');
